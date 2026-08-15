@@ -1,10 +1,8 @@
-agents: "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a grok -a pi -a zed"
-
+agents: "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a pi -a zed"
 skills:
   # --- research ---
   safishamsi/graphify:
   warpdotdev/common-skills: [council]
-
   # --- coding ---
   mattpocock/skills:
     install: ~/skills/pockock@skills/scripts/link-skills.sh
@@ -12,49 +10,11 @@ skills:
   upstash/context7:
   garrytan/gstack: [gstack]
   DietrichGebert/ponytail:
-  tuist/agent-skills:
-    [
-      analyze-selective-testing,
-      compare-builds,
-      compare-bundles,
-      compare-cache-runs,
-      compare-generations,
-      compare-gradle-builds,
-      compare-test-case,
-      compare-test-runs,
-      debug-generated-project,
-      fix-flaky-tests,
-      using-tuist-generated-projects,
-      migrating-to-tuist-generated-projects,
-    ]
+  tuist/agent-skills: [analyze-selective-testing, compare-builds, compare-bundles, compare-cache-runs, compare-generations, compare-gradle-builds, compare-test-case, compare-test-runs, debug-generated-project, fix-flaky-tests, using-tuist-generated-projects, migrating-to-tuist-generated-projects]
   https://github.com/antfu/skills: [vite]
-  hashicorp/agent-skills:
-    [
-      aws-ami-builder,
-      azure-image-builder,
-      azure-verified-modules,
-      new-terraform-provider,
-      provider-actions,
-      provider-docs,
-      provider-resources,
-      provider-test-patterns,
-      push-to-registry,
-      refactor-module,
-      run-acceptance-tests,
-      terraform-search-import,
-      terraform-stacks,
-      terraform-style-guide,
-      terraform-test,
-      windows-builder,
-    ]
+  hashicorp/agent-skills: [aws-ami-builder, azure-image-builder, azure-verified-modules, new-terraform-provider, provider-actions, provider-docs, provider-resources, provider-test-patterns, push-to-registry, refactor-module, run-acceptance-tests, terraform-search-import, terraform-stacks, terraform-style-guide, terraform-test, windows-builder]
   https://github.com/julianobarbosa/claude-code-skills: [shellcheck]
-  https://github.com/vercel-labs/agent-skills:
-    [
-      vercel-composition-patterns,
-      vercel-react-best-practices,
-      web-design-guidelines,
-    ]
-
+  https://github.com/vercel-labs/agent-skills: [vercel-composition-patterns, vercel-react-best-practices, web-design-guidelines]
   # --- design ---
   thebushidocollective/han:
     install: ~/agent-skills/scripts/install-storybook-skill.sh
@@ -63,22 +23,23 @@ skills:
   https://github.com/vercel-labs/next-skills: [next-best-practices]
   https://github.com/anthropics/skills: [frontend-design]
   https://github.com/nextlevelbuilder/ui-ux-pro-max-skill: [ui-ux-pro-max]
-
   # --- testing ---
   ratacat/claude-skills: [xcode-test]
-
   # --- security ---
   semgrep/skills:
-
+  firecrawl/cli:
+  mem0ai/mem0:
+  yoshi-ortiz/cyber-skills:
+    - aesthetic
 mcp:
   # --- browser ---
   microsoft/playwright-mcp:
-
+  # --- design: component + token registries, see aesthetic/references/design-tools.md ---
+  figma/mcp:
+  "@shadcn/mcp":
   # --- 3d ---
   https://projects.blender.org/lab/blender_mcp.git:
-
   # --- docs ---
   "@upstash/context7-mcp":
-
   # --- search ---
   exa-mcp-server:
