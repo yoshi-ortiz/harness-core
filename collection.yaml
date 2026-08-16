@@ -1,46 +1,85 @@
+# harness-core collection
+#
+# agents:     flag string for `npx skills add -g`. `harness onboard` rewrites
+#             this from the agents actually installed on the box.
+# categories: label + one-line pitch, shown in the onboarding picker.
+# skills:     grouped by category. Per repo:
+#               bare            → every skill in the repo
+#               [a, b]          → only those skills
+#               {install: path} → run that script instead
 agents: "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a pi -a zed"
+
+categories:
+  research: Knowledge graphs, docs lookup, multi-agent review
+  coding: Workflow, planning, and language-agnostic engineering practice
+  web: React, Next, Vite, and browser-platform guidance
+  design: Design systems, component libraries, and UI craft
+  mobile: iOS and Xcode build/test tooling
+  infra: Terraform, cloud images, and provider development
+  security: Static analysis and secure-code review
+
 skills:
-  # --- research ---
-  safishamsi/graphify:
-  warpdotdev/common-skills: [council]
-  # --- coding ---
-  mattpocock/skills:
-  obra/superpowers:
-  upstash/context7:
-  garrytan/gstack: [gstack]
-  DietrichGebert/ponytail:
-  tuist/agent-skills: [analyze-selective-testing, compare-builds, compare-bundles, compare-cache-runs, compare-generations, compare-gradle-builds, compare-test-case, compare-test-runs, debug-generated-project, fix-flaky-tests, using-tuist-generated-projects, migrating-to-tuist-generated-projects]
-  https://github.com/antfu/skills: [vite]
-  hashicorp/agent-skills: [aws-ami-builder, azure-image-builder, azure-verified-modules, new-terraform-provider, provider-actions, provider-docs, provider-resources, provider-test-patterns, push-to-registry, refactor-module, run-acceptance-tests, terraform-search-import, terraform-stacks, terraform-style-guide, terraform-test, windows-builder]
-  https://github.com/julianobarbosa/claude-code-skills: [shellcheck]
-  https://github.com/vercel-labs/agent-skills: [vercel-composition-patterns, vercel-react-best-practices, web-design-guidelines]
-  # --- design ---
-  thebushidocollective/han:
-    install: scripts/install-storybook-skill.sh
-  GoogleChrome/modern-web-guidance:
-  https://github.com/shadcn/ui: [shadcn]
-  # next-best-practices: gone upstream — vercel-labs/next-skills now ships
-  # AGENTS.md/CLAUDE.md rules instead of a SKILL.md. Re-add if it comes back.
-  # https://github.com/vercel-labs/next-skills: [next-best-practices]
-  https://github.com/anthropics/skills: [frontend-design]
-  https://github.com/nextlevelbuilder/ui-ux-pro-max-skill: [ui-ux-pro-max]
-  # --- testing ---
-  ratacat/claude-skills: [xcode-test]
-  # --- security ---
-  semgrep/skills:
-  firecrawl/cli:
-  mem0ai/mem0:
-  yoshi-ortiz/cyber-skills:
-    - aesthetic
+  research:
+    safishamsi/graphify:
+    warpdotdev/common-skills: [council]
+    upstash/context7:
+    firecrawl/cli:
+    mem0ai/mem0:
+
+  coding:
+    mattpocock/skills:
+    obra/superpowers:
+    garrytan/gstack: [gstack]
+    DietrichGebert/ponytail:
+    https://github.com/julianobarbosa/claude-code-skills: [shellcheck]
+
+  web:
+    https://github.com/vercel-labs/agent-skills:
+      [vercel-composition-patterns, vercel-react-best-practices, web-design-guidelines]
+    https://github.com/antfu/skills: [vite]
+    GoogleChrome/modern-web-guidance:
+    # next-best-practices: gone upstream — vercel-labs/next-skills now ships
+    # AGENTS.md/CLAUDE.md rules instead of a SKILL.md. Re-add if it comes back.
+    # https://github.com/vercel-labs/next-skills: [next-best-practices]
+
+  design:
+    https://github.com/anthropics/skills: [frontend-design]
+    https://github.com/nextlevelbuilder/ui-ux-pro-max-skill: [ui-ux-pro-max]
+    https://github.com/shadcn/ui: [shadcn]
+    yoshi-ortiz/cyber-skills: [aesthetic]
+    thebushidocollective/han:
+      install: scripts/install-storybook-skill.sh
+
+  mobile:
+    ratacat/claude-skills: [xcode-test]
+    tuist/agent-skills:
+      [analyze-selective-testing, compare-builds, compare-bundles, compare-cache-runs,
+       compare-generations, compare-gradle-builds, compare-test-case, compare-test-runs,
+       debug-generated-project, fix-flaky-tests, using-tuist-generated-projects,
+       migrating-to-tuist-generated-projects]
+
+  infra:
+    hashicorp/agent-skills:
+      [aws-ami-builder, azure-image-builder, azure-verified-modules,
+       new-terraform-provider, provider-actions, provider-docs, provider-resources,
+       provider-test-patterns, push-to-registry, refactor-module,
+       run-acceptance-tests, terraform-search-import, terraform-stacks,
+       terraform-style-guide, terraform-test, windows-builder]
+
+  security:
+    semgrep/skills:
+
+# Smithery-installable servers only. Verified with `smithery mcp search`;
+# anything that 404s every sync does not belong here.
 mcp:
-  # --- browser ---
-  microsoft/playwright-mcp:
-  # --- design: component + token registries, see aesthetic/references/design-tools.md ---
-  figma/mcp:
-  "@shadcn/mcp":
-  # --- 3d ---
-  https://projects.blender.org/lab/blender_mcp.git:
   # --- docs ---
   "@upstash/context7-mcp":
   # --- search ---
-  exa-mcp-server:
+  exa:
+
+# Not on Smithery — these ship through their own channels and 404'd on every
+# sync when listed above. Add them to the agent's own MCP config directly:
+#   playwright  npx @playwright/mcp@latest
+#   figma       built into the Figma desktop app (Preferences → enable MCP server)
+#   shadcn      npx shadcn@latest mcp init
+#   blender     a git URL, which Smithery needs `--name <alias>` for

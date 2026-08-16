@@ -172,11 +172,19 @@ EOF
 
 install_shim
 
-say "syncing collection"
-"$REPO_DIR/pony.harness.sh" sync "$@"
+# With args (--dry-run and friends) go straight to sync; otherwise hand over to
+# onboarding, which picks agents and categories and then installs. Piping from
+# curl leaves stdin unusable, so onboard prompts on /dev/tty — and falls back to
+# the manifest's current selection when there is no terminal at all.
+if [[ $# -gt 0 ]]; then
+  "$REPO_DIR/pony.harness.sh" sync "$@"
+else
+  "$REPO_DIR/pony.harness.sh" onboard
+fi
 
 echo
-echo "✓ harness installed at $REPO_DIR"
+echo "  harness status    — what's selected and installed"
+echo "  harness onboard   — change the selection"
 echo "  harness upgrade   — update collection, tools, and skills"
-echo "  harness sync      — reinstall everything in collection.yaml"
+echo
 echo "  start a new agent session to pick up the skills"
