@@ -5,7 +5,6 @@ skills:
   warpdotdev/common-skills: [council]
   # --- coding ---
   mattpocock/skills:
-    install: ~/skills/pockock@skills/scripts/link-skills.sh
   obra/superpowers:
   upstash/context7:
   garrytan/gstack: [gstack]
@@ -17,10 +16,12 @@ skills:
   https://github.com/vercel-labs/agent-skills: [vercel-composition-patterns, vercel-react-best-practices, web-design-guidelines]
   # --- design ---
   thebushidocollective/han:
-    install: ~/agent-skills/scripts/install-storybook-skill.sh
+    install: scripts/install-storybook-skill.sh
   GoogleChrome/modern-web-guidance:
   https://github.com/shadcn/ui: [shadcn]
-  https://github.com/vercel-labs/next-skills: [next-best-practices]
+  # next-best-practices: gone upstream — vercel-labs/next-skills now ships
+  # AGENTS.md/CLAUDE.md rules instead of a SKILL.md. Re-add if it comes back.
+  # https://github.com/vercel-labs/next-skills: [next-best-practices]
   https://github.com/anthropics/skills: [frontend-design]
   https://github.com/nextlevelbuilder/ui-ux-pro-max-skill: [ui-ux-pro-max]
   # --- testing ---

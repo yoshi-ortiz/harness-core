@@ -25,10 +25,15 @@ need_yq() {
   }
 }
 
+have_smithery() {
+  $DRY_RUN && return 0
+  command -v smithery >/dev/null 2>&1
+}
+
 need_smithery() {
-  $DRY_RUN || command -v smithery >/dev/null 2>&1 || {
+  have_smithery || {
     echo "✗ needs smithery (npm install -g smithery@latest)" >&2
-    exit 1
+    return 1
   }
 }
 
@@ -48,7 +53,7 @@ save_skill() {
   manifest_has skills "$source" && return 0
   if $DRY_RUN; then
     if [[ -n "$install_path" ]]; then
-      echo "yq -i '.skills[strenv(KEY)] = {\"install\": strenv(PATH)}' collection.yaml"
+      echo "yq -i '.skills[strenv(KEY)] = {\"install\": strenv(VAL)}' collection.yaml"
     elif [[ -n "$named" ]]; then
       echo "yq -i '.skills[strenv(KEY)] = [strenv(NAME)]' collection.yaml"
     else
@@ -57,7 +62,7 @@ save_skill() {
     return
   fi
   if [[ -n "$install_path" ]]; then
-    KEY=$source PATH=$install_path yq -i '.skills[strenv(KEY)] = {"install": strenv(PATH)}' "$MANIFEST"
+    KEY=$source VAL=$install_path yq -i '.skills[strenv(KEY)] = {"install": strenv(VAL)}' "$MANIFEST"
   elif [[ -n "$named" ]]; then
     KEY=$source NAME=$named yq -i '.skills[strenv(KEY)] = [strenv(NAME)]' "$MANIFEST"
   else
@@ -95,13 +100,15 @@ install_skill() {
   install=$(KEY=$source yq -r '.skills[strenv(KEY)] | select(tag == "!!map") | .install // ""' "$MANIFEST")
   if [[ -n "$install" && -z "$named" ]]; then
     install="${install/#\~/$HOME}"
+    # relative paths resolve against the collection, not the caller's cwd
+    [[ "$install" == /* ]] || install="${COLLECTION_DIR}/${install}"
     if $DRY_RUN; then
       echo "bash $(printf '%q' "$install")"
       return
     fi
     [[ -x "$install" ]] || {
-      echo "✗ ${source}: ${install} missing" >&2
-      exit 1
+      echo "✗ ${source}: install script ${install} missing or not executable" >&2
+      return 1
     }
     echo "→ install ${source}"
     bash "$install"
@@ -162,8 +169,8 @@ install_mcp() {
   done
 }
 
-sync_cursor_skills() {
-  local script="${COLLECTION_DIR:-.}/scripts/sync-cursor-skills.sh"
+sync_skills() {
+  local script="${COLLECTION_DIR:-.}/scripts/sync-skills.sh"
   [[ -x "$script" ]] || return 0
   if $DRY_RUN; then
     echo "bash $(printf '%q' "$script")"
@@ -175,16 +182,42 @@ sync_cursor_skills() {
 sync_agents() {
   need_yq
   local source server
+  local ok=0
+  local -a failed=()
   while read -r source; do
     [[ -n "$source" ]] || continue
-    install_skill "$source" || echo "✗ skipped failed source: $source" >&2  # ponytail: one bad repo shouldn't kill the rest
+    # ponytail: one bad repo shouldn't kill the rest
+    if install_skill "$source"; then
+      ok=$((ok + 1))
+    else
+      failed+=("skill $source")
+      echo "✗ skipped failed source: $source" >&2
+    fi
   done < <(yq -r '.skills | keys[]' "$MANIFEST")
-  sync_cursor_skills
+  sync_skills
+
   if yq -e '.mcp' "$MANIFEST" >/dev/null 2>&1; then
-    while read -r server; do
-      [[ -n "$server" ]] || continue
-      install_mcp "$server" || echo "✗ skipped failed mcp: $server" >&2
-    done < <(yq -r '.mcp | keys[]' "$MANIFEST")
+    if have_smithery; then
+      while read -r server; do
+        [[ -n "$server" ]] || continue
+        if install_mcp "$server"; then
+          ok=$((ok + 1))
+        else
+          failed+=("mcp $server")
+          echo "✗ skipped failed mcp: $server" >&2
+        fi
+      done < <(yq -r '.mcp | keys[]' "$MANIFEST")
+    else
+      echo "⚠ smithery not installed — skipping all mcp entries" >&2
+      echo "  npm install -g smithery@latest" >&2
+    fi
+  fi
+
+  echo
+  echo "✓ ${ok} installed, ${#failed[@]} failed"
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    printf '  ✗ %s\n' "${failed[@]}" >&2
+    return 1
   fi
 }
 
@@ -235,7 +268,7 @@ case "${ACTION:-}" in
   skill)
     $NO_SAVE || save_skill "$SKILL_REPO" "${SKILL_NAME:-}" "${INSTALL_PATH:-}"
     install_skill "$SKILL_REPO" "${SKILL_NAME:-}"
-    sync_cursor_skills
+    sync_skills
     ;;
   mcp)
     $NO_SAVE || save_mcp "$MCP_REPO"
