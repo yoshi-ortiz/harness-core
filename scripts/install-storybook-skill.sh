@@ -11,7 +11,10 @@ agents=$(yq -r '.agents' collection.yaml)
 npx skills add thebushidocollective/han -g ${agents} -s storybook-story-writing -y </dev/null
 
 if [[ -f "$SKILL_PATH" ]]; then
-  sed -i '' '/^user-invocable: false$/d' "$SKILL_PATH"
+  # not `sed -i ''` — that spelling is BSD-only and fails on GNU sed (Linux, Git Bash)
+  tmp="$(mktemp)"
+  sed '/^user-invocable: false$/d' "$SKILL_PATH" >"$tmp"
+  mv "$tmp" "$SKILL_PATH"
 else
   echo "✗ ${SKILL_PATH} missing after install" >&2
   exit 1

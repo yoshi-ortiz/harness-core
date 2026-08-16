@@ -9,13 +9,58 @@ NO_SAVE=false
 AGENT_FLAGS=()
 
 usage() {
-  cat >&2 <<EOF
+  local code=${1:-1}
+  # help is not an error: -h prints to stdout and exits clean
+  [[ $code -eq 0 ]] && exec 3>&1 || exec 3>&2
+  cat >&3 <<EOF
 usage:
-  pony.harness.sh --agents [--dry-run]
-  pony.harness.sh skills add owner/repo [skill] [--install path] [--no-save] [--dry-run]
-  pony.harness.sh mcp add owner/repo [--no-save] [--dry-run]
+  harness sync [--dry-run]                 install everything in collection.yaml
+  harness upgrade [--dry-run]              pull, refresh deps, reinstall skills
+  harness version                          commit + install path
+  harness skills add owner/repo [skill] [--install path] [--no-save] [--dry-run]
+  harness mcp add owner/repo [--no-save] [--dry-run]
 EOF
-  exit 1
+  exit "$code"
+}
+
+version() {
+  local rev="unknown"
+  rev="$(git -C "$COLLECTION_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  echo "harness ${rev}"
+  echo "  collection: ${COLLECTION_DIR}"
+  echo "  skills:     ${HOME}/.agents/skills"
+}
+
+# upgrade = newest collection, newest tools, newest skills. `skills add` and
+# `smithery mcp add` are both idempotent re-fetches, so sync_agents doubles as
+# the skill/mcp upgrade step.
+upgrade() {
+  if git -C "$COLLECTION_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    if $DRY_RUN; then
+      echo "git -C $(printf '%q' "$COLLECTION_DIR") pull --ff-only"
+    else
+      echo "→ updating collection"
+      git -C "$COLLECTION_DIR" pull --ff-only || \
+        echo "⚠ collection pull failed — continuing with the local copy" >&2
+    fi
+  fi
+
+  if $DRY_RUN; then
+    echo "brew upgrade yq"
+    echo "npm install -g smithery@latest"
+  else
+    if command -v brew >/dev/null 2>&1; then
+      echo "→ refreshing yq"
+      brew upgrade yq 2>/dev/null || true
+    fi
+    if command -v npm >/dev/null 2>&1; then
+      echo "→ refreshing smithery"
+      npm install -g smithery@latest >/dev/null || \
+        echo "⚠ smithery refresh failed — keeping the installed version" >&2
+    fi
+  fi
+
+  sync_agents
 }
 
 need_yq() {
@@ -224,7 +269,10 @@ sync_agents() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=true; shift ;;
-    --agents) ACTION=agents; shift ;;
+    --agents|sync) ACTION=agents; shift ;;
+    upgrade|--upgrade) ACTION=upgrade; shift ;;
+    version|--version|-v) ACTION=version; shift ;;
+    -h|--help) usage 0 ;;
     skills)
       shift
       [[ "${1:-}" == add && -n "${2:-}" ]] || usage
@@ -265,6 +313,8 @@ done
 
 case "${ACTION:-}" in
   agents) sync_agents ;;
+  upgrade) upgrade ;;
+  version) version ;;
   skill)
     $NO_SAVE || save_skill "$SKILL_REPO" "${SKILL_NAME:-}" "${INSTALL_PATH:-}"
     install_skill "$SKILL_REPO" "${SKILL_NAME:-}"
