@@ -35,6 +35,6 @@ Keep them under `scripts/` and idempotent. `scripts/install-pstack.sh` also inst
 
 ## After install
 
-Skills land in `~/.agents/skills/` (bridged into Cursor). Start a **new Cursor chat** so the skill list reloads.
+Skills land in `~/.agents/skills/` (bridged into Cursor). Sync runs `scripts/normalize-skill-frontmatter.sh` to clamp descriptions to 1024 chars so Pi stays warning-free. Start a **new Cursor chat** so the skill list reloads.
 
 Keep this project minimal: no new abstractions without need.
