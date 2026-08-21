@@ -95,6 +95,7 @@ install_skill() {
   install=$(KEY=$source yq -r '.skills[strenv(KEY)] | select(tag == "!!map") | .install // ""' "$MANIFEST")
   if [[ -n "$install" && -z "$named" ]]; then
     install="${install/#\~/$HOME}"
+    [[ "$install" == /* ]] || install="${COLLECTION_DIR}/${install}"
     if $DRY_RUN; then
       echo "bash $(printf '%q' "$install")"
       return

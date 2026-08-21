@@ -27,6 +27,10 @@ pony.harness.sh     install entrypoint
 | `mcp`    | Smithery server IDs                                                  |
 
 
+Skill frontmatter `name:` must be kebab-case for Pi (`/skill:name`); multi-word names break first-space expand.
+
+Agents adding skills or MCP: see [AGENTS.md](AGENTS.md).
+
 Never use `npx skills add … --all`.
 
 Adding to `collection.yaml` alone does not install skills. Run:

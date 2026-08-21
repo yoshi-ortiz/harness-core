@@ -15,9 +15,11 @@ skills:
   hashicorp/agent-skills: [aws-ami-builder, azure-image-builder, azure-verified-modules, new-terraform-provider, provider-actions, provider-docs, provider-resources, provider-test-patterns, push-to-registry, refactor-module, run-acceptance-tests, terraform-search-import, terraform-stacks, terraform-style-guide, terraform-test, windows-builder]
   https://github.com/julianobarbosa/claude-code-skills: [shellcheck]
   https://github.com/vercel-labs/agent-skills: [vercel-composition-patterns, vercel-react-best-practices, web-design-guidelines]
+  https://github.com/cursor/plugins/tree/main/pstack:
+    install: scripts/install-pstack.sh
   # --- design ---
   thebushidocollective/han:
-    install: ~/agent-skills/scripts/install-storybook-skill.sh
+    install: scripts/install-storybook-skill.sh
   GoogleChrome/modern-web-guidance:
   https://github.com/shadcn/ui: [shadcn]
   https://github.com/vercel-labs/next-skills: [next-best-practices]
