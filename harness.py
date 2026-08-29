@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -30,8 +32,22 @@ FANOUT = ROOT / "scripts" / "sync-skills.sh"
 # Smithery names its clients differently from `skills add` agent flags.
 SMITHERY_CLIENTS = {"cursor": "cursor", "claude-code": "claude", "zed": "zed"}
 
+# `npx skills add` scores every skill it installs and prints the table. This
+# reads that table back, because a security assessment nothing acts on is a
+# security assessment nobody made.
+RISK_ROW = re.compile(
+    r"^\s*(?:│\s*)?(.+?)\s{2,}"
+    r"(Safe|Low Risk|Med Risk|High Risk|Critical Risk)\s{2,}"
+    r"(\d+) alerts?\s{2,}(Low|Med|High|Critical) Risk",
+    re.MULTILINE)
+ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
 
 class HarnessError(RuntimeError):
+    pass
+
+
+class SecurityRisk(HarnessError):
     pass
 
 
@@ -72,14 +88,82 @@ def node_ready() -> None:
     raise HarnessError("node/npx not found; run the installer, or `nvm use --lts`")
 
 
-def run(argv: list[str], dry: bool) -> None:
+def run(argv: list[str], dry: bool, capture: bool = False,
+        env: dict[str, str] | None = None) -> str:
+    """Run it. With `capture`, stream the output live *and* return it.
+
+    Streaming matters: a sync takes minutes and a silent one reads as hung.
+    Capturing matters: the installer's risk table is on stdout and nowhere else.
+    """
     if dry:
         print("  " + " ".join(argv))
-        return
-    subprocess.run(argv, check=True, stdin=subprocess.DEVNULL)
+        return ""
+    if not capture:
+        subprocess.run(argv, check=True, stdin=subprocess.DEVNULL, env=env)
+        return ""
+    seen: list[str] = []
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, text=True, errors="replace",
+                            env=env)
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        sys.stdout.write(line)
+        seen.append(line)
+    if proc.wait():
+        raise subprocess.CalledProcessError(proc.returncode, argv)
+    return "".join(seen)
 
 
-def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> None:
+def scan_risk(output: str) -> list[tuple[str, str, int, str]]:
+    """Every scored row the installer printed: (skill, gen, alerts, snyk)."""
+    return [(m[1], m[2], int(m[3]), m[4])
+            for m in RISK_ROW.finditer(ANSI.sub("", output))]
+
+
+def unclean(rows: list[tuple[str, str, int, str]]) -> list[tuple]:
+    """Rows that are not a clean bill: any alert, any non-Safe generated
+    verdict, or a High dependency risk. One bar, deliberately. Tiers here
+    would be somebody deciding in code which findings are allowed to pass
+    unread, which is the habit this whole check exists to break."""
+    return [r for r in rows
+            if r[1] != "Safe" or r[2] > 0 or r[3] in ("High", "Critical")]
+
+
+def risk_failure(output: str) -> str | None:
+    rows = scan_risk(output)
+    if not rows:
+        return "no security assessment returned"
+    bad = unclean(rows)
+    if not bad:
+        return None
+    return ", ".join(
+        f"{name} (Gen {generated}, Socket {alerts}, Snyk {snyk})"
+        for name, generated, alerts, snyk in bad)
+
+
+def preflight_env(home: Path) -> dict[str, str]:
+    """Keep a scanner run away from every real agent directory."""
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["USERPROFILE"] = str(home)
+    env["XDG_CONFIG_HOME"] = str(home / ".config")
+    env["XDG_STATE_HOME"] = str(home / ".local" / "state")
+    env["APPDATA"] = str(home / "AppData" / "Roaming")
+    for name, relative in {
+        "CLAUDE_CONFIG_DIR": ".claude",
+        "CODEX_HOME": ".codex",
+        "VIBE_HOME": ".vibe",
+        "HERMES_HOME": ".hermes",
+        "AUTOHAND_HOME": ".autohand",
+        "GROK_HOME": ".grok",
+        "FLATPAK_XDG_CONFIG_HOME": ".config",
+    }.items():
+        env[name] = str(home / relative)
+    env.setdefault("npm_config_cache", str(Path.home() / ".npm"))
+    return env
+
+
+def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
     """A dict spec runs its own script. A list names skills; empty takes all."""
     if isinstance(spec, dict) and "install" in spec:
         script = Path(str(spec["install"])).expanduser()
@@ -87,12 +171,21 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> None:
         if not dry and not script.is_file():
             raise HarnessError(f"install script missing: {script}")
         run(["bash", str(script)], dry)
-        return
+        return ""
 
     node_ready()
     named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]
-    run(["npx", "skills", "add", source, "-g", *agent_flags(manifest),
-         *(named or ["--skill", "*"]), "-y"], dry)
+    argv = ["npx", "skills", "add", source, "-g", *agent_flags(manifest),
+            *(named or ["--skill", "*"]), "-y"]
+    if dry:
+        return run(argv, True)
+
+    with tempfile.TemporaryDirectory(prefix="harness-security-") as raw:
+        output = run(argv, False, capture=True, env=preflight_env(Path(raw)))
+    risk = risk_failure(output)
+    if risk:
+        raise SecurityRisk(f"security assessment failed: {risk}")
+    return run(argv, False)
 
 
 def mcp_clients(manifest: dict) -> list[str]:
@@ -133,6 +226,7 @@ def sync(dry: bool = False) -> int:
         return 1
 
     failed: list[str] = []
+    security_failed = False
     for cat in chosen:
         entries = manifest.get("skills", {}).get(cat, {})
         if not entries:
@@ -143,11 +237,15 @@ def sync(dry: bool = False) -> int:
                 install_skill(manifest, source, spec, dry)
                 print(f"  ok    {source}")
             except (subprocess.CalledProcessError, HarnessError) as exc:
+                if isinstance(exc, SecurityRisk):
+                    security_failed = True
                 print(f"  FAIL  {source}: {exc}")
                 failed.append(source)
 
     print("\nfan out to agent dirs")
-    if FANOUT.is_file():
+    if security_failed:
+        print("  withheld: a security assessment failed")
+    elif FANOUT.is_file():
         try:
             run(["bash", str(FANOUT)], dry)
         except subprocess.CalledProcessError as exc:

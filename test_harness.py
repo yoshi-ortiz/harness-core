@@ -6,6 +6,10 @@ asserts on what `--dry-run` would emit.
 """
 import io
 import contextlib
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -106,6 +110,64 @@ class ManifestTest(unittest.TestCase):
         self.path.unlink()
         with self.assertRaisesRegex(harness.HarnessError, "no manifest"):
             harness.load()
+
+    def test_security_table_parser_keeps_every_non_clean_row(self) -> None:
+        output = """\
+│  \x1b[36mgraphify\x1b[0m  Med Risk          2 alerts          Med Risk
+│  safe skill  Safe              0 alerts          Low Risk
+│  shellcheck  High Risk         0 alerts          Med Risk
+"""
+        self.assertEqual(
+            harness.unclean(harness.scan_risk(output)),
+            [("graphify", "Med Risk", 2, "Med"),
+             ("shellcheck", "High Risk", 0, "Med")])
+
+    def test_missing_security_table_fails_closed(self) -> None:
+        self.assertEqual(harness.risk_failure("installation complete"),
+                         "no security assessment returned")
+
+
+class SecurityGateBlackBoxTest(unittest.TestCase):
+    def test_risky_install_exits_nonzero_without_fanning_out(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            shutil.copy2(Path(harness.__file__), root / "harness.py")
+            (root / "collection.toml").write_text(
+                'agents = "-a claude-code"\n\n'
+                '[skills.research]\n"owner/risky" = ["graphify"]\n',
+                encoding="utf-8")
+
+            bin_dir = root / "bin"
+            scripts = root / "scripts"
+            bin_dir.mkdir()
+            scripts.mkdir()
+            (bin_dir / "npx").write_text(
+                "#!/bin/sh\n"
+                "if [ \"$HOME\" = \"$REAL_HOME\" ]; then "
+                "touch \"$REAL_INSTALL\"; fi\n"
+                "printf '│  graphify  Med Risk          2 alerts          Med Risk\\n'\n",
+                encoding="utf-8")
+            (bin_dir / "npx").chmod(0o755)
+            marker = root / "fanned-out"
+            (scripts / "sync-skills.sh").write_text(
+                f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+            (scripts / "sync-skills.sh").chmod(0o755)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+            env["HOME"] = str(root / "real-home")
+            env["REAL_HOME"] = env["HOME"]
+            env["REAL_INSTALL"] = str(root / "real-install")
+            done = subprocess.run(
+                [sys.executable, str(root / "harness.py"), "sync"],
+                capture_output=True, text=True, env=env)
+
+            self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+            self.assertIn("security assessment failed", done.stdout)
+            self.assertIn("withheld", done.stdout)
+            self.assertFalse((root / "real-install").exists(),
+                             "risk reached the real installer")
+            self.assertFalse(marker.exists(), "risk reached cross-agent fan-out")
 
 
 if __name__ == "__main__":
