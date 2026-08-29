@@ -1,0 +1,75 @@
+# harness-core collection
+#
+# agents:     flag string for `npx skills add -g`. `harness onboard` rewrites
+#             this from the agents actually installed on the box.
+# categories: label + one-line pitch, shown in the onboarding picker.
+# skills:     grouped by category. Per repo:
+#               []                 -> every skill in the repo
+#               ["a", "b"]         -> only those skills
+#               { install = "p" }  -> run that script instead
+# mcp:        Smithery-installable servers, synced to every agent that has a
+#             Smithery client. Verified with `smithery mcp search`; anything
+#             that 404s every sync does not belong here.
+
+agents = "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a pi -a zed"
+
+# Absent means every category. An empty list means none.
+# selected = ["research", "coding"]
+
+[categories]
+research = "Knowledge graphs, docs lookup, multi-agent review"
+coding = "Workflow, planning, and language-agnostic engineering practice"
+web = "React, Next, Vite, and browser-platform guidance"
+design = "Design systems, component libraries, and UI craft"
+mobile = "iOS and Xcode build/test tooling"
+infra = "Terraform, cloud images, and provider development"
+security = "Static analysis and secure-code review"
+
+[skills.research]
+"safishamsi/graphify" = []
+"warpdotdev/common-skills" = ["council"]
+"upstash/context7" = []
+"firecrawl/cli" = []
+"mem0ai/mem0" = []
+
+[skills.coding]
+"mattpocock/skills" = []
+"obra/superpowers" = []
+"garrytan/gstack" = ["gstack"]
+"DietrichGebert/ponytail" = []
+"https://github.com/julianobarbosa/claude-code-skills" = ["shellcheck"]
+
+[skills.web]
+"https://github.com/vercel-labs/agent-skills" = ["vercel-composition-patterns", "vercel-react-best-practices", "web-design-guidelines"]
+"https://github.com/antfu/skills" = ["vite"]
+"GoogleChrome/modern-web-guidance" = []
+
+[skills.design]
+"https://github.com/anthropics/skills" = ["frontend-design"]
+"https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
+"https://github.com/shadcn/ui" = ["shadcn"]
+"yoshi-ortiz/cyber-skills" = ["aesthetic", "ora"]
+"thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
+
+[skills.mobile]
+"ratacat/claude-skills" = ["xcode-test"]
+"tuist/agent-skills" = ["analyze-selective-testing", "compare-builds", "compare-bundles", "compare-cache-runs", "compare-generations", "compare-gradle-builds", "compare-test-case", "compare-test-runs", "debug-generated-project", "fix-flaky-tests", "using-tuist-generated-projects", "migrating-to-tuist-generated-projects"]
+
+[skills.infra]
+"hashicorp/agent-skills" = ["aws-ami-builder", "azure-image-builder", "azure-verified-modules", "new-terraform-provider", "provider-actions", "provider-docs", "provider-resources", "provider-test-patterns", "push-to-registry", "refactor-module", "run-acceptance-tests", "terraform-search-import", "terraform-stacks", "terraform-style-guide", "terraform-test", "windows-builder"]
+
+[skills.security]
+"semgrep/skills" = []
+
+# Servers removed from this list on 2026-08-28 because they 404d every sync.
+# Re-add by uncommenting; the harness syncs whatever is here.
+# [mcp]
+# "@upstash/context7-mcp" = {}
+# exa = {}
+#
+# Not on Smithery -- these ship through their own channels. Add them to the
+# agent's own MCP config directly:
+#   playwright  npx @playwright/mcp@latest
+#   figma       built into the Figma desktop app (Preferences -> enable MCP server)
+#   shadcn      npx shadcn@latest mcp init
+#   blender     a git URL, which Smithery needs `--name <alias>` for

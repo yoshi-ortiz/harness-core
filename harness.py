@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""Install the curated skill collection into every agent on this machine.
+
+One file, standard library only. The manifest is TOML because `tomllib` reads
+it with no dependency at all, where the YAML it replaced needed `yq` on the
+PATH before the harness could answer its own `--help`.
+
+    python3 ~/.harness-core/harness.py sync
+    python3 ~/.harness-core/harness.py status
+    python3 ~/.harness-core/harness.py add owner/repo [skill] --category coding
+
+`npx skills add` is still the installer and `scripts/sync-skills.sh` still does
+the cross-agent fan-out. This owns the manifest, the selection, and the order.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+MANIFEST = ROOT / "collection.toml"
+SKILLS_DIR = Path.home() / ".agents" / "skills"
+FANOUT = ROOT / "scripts" / "sync-skills.sh"
+
+# Smithery names its clients differently from `skills add` agent flags.
+SMITHERY_CLIENTS = {"cursor": "cursor", "claude-code": "claude", "zed": "zed"}
+
+
+class HarnessError(RuntimeError):
+    pass
+
+
+def load() -> dict:
+    if not MANIFEST.is_file():
+        raise HarnessError(f"no manifest at {MANIFEST}")
+    with MANIFEST.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def categories(manifest: dict) -> list[str]:
+    """Absent `selected` means every category. An empty list means none."""
+    return list(manifest.get("selected", manifest.get("skills", {})))
+
+
+def sources(manifest: dict) -> list[tuple[str, str, object]]:
+    """(category, source, spec) in manifest order, selection applied."""
+    skills = manifest.get("skills", {})
+    return [(cat, src, spec)
+            for cat in categories(manifest)
+            for src, spec in skills.get(cat, {}).items()]
+
+
+def agent_flags(manifest: dict) -> list[str]:
+    return str(manifest.get("agents", "")).split()
+
+
+def node_ready() -> None:
+    """nvm puts node on the PATH from a shell rc, which a non-login run never
+    reads. Find it ourselves rather than failing under cron or an editor."""
+    if shutil.which("npx"):
+        return
+    nvm = Path(os.environ.get("NVM_DIR") or Path.home() / ".nvm") / "versions" / "node"
+    for bin_dir in sorted(nvm.glob("*/bin"), reverse=True):
+        if (bin_dir / "npx").exists():
+            os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+            return
+    raise HarnessError("node/npx not found; run the installer, or `nvm use --lts`")
+
+
+def run(argv: list[str], dry: bool) -> None:
+    if dry:
+        print("  " + " ".join(argv))
+        return
+    subprocess.run(argv, check=True, stdin=subprocess.DEVNULL)
+
+
+def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> None:
+    """A dict spec runs its own script. A list names skills; empty takes all."""
+    if isinstance(spec, dict) and "install" in spec:
+        script = Path(str(spec["install"])).expanduser()
+        script = script if script.is_absolute() else ROOT / script
+        if not dry and not script.is_file():
+            raise HarnessError(f"install script missing: {script}")
+        run(["bash", str(script)], dry)
+        return
+
+    node_ready()
+    named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]
+    run(["npx", "skills", "add", source, "-g", *agent_flags(manifest),
+         *(named or ["--skill", "*"]), "-y"], dry)
+
+
+def mcp_clients(manifest: dict) -> list[str]:
+    flags = agent_flags(manifest)
+    agents = [flags[i + 1] for i, flag in enumerate(flags)
+              if flag == "-a" and i + 1 < len(flags)]
+    return [SMITHERY_CLIENTS[a] for a in agents if a in SMITHERY_CLIENTS]
+
+
+def sync_mcp(manifest: dict, dry: bool) -> list[str]:
+    """Every declared server, into every agent that has a Smithery client."""
+    servers = list(manifest.get("mcp", {}))
+    if not servers:
+        return []
+    if not dry and not shutil.which("smithery"):
+        print("  smithery not installed, skipping mcp "
+              "(npm install -g smithery@latest)")
+        return []
+    clients = mcp_clients(manifest)
+    if not clients:
+        print("  no Smithery client among the declared agents, skipping mcp")
+        return []
+    failed = []
+    for server in servers:
+        for client in clients:
+            try:
+                run(["smithery", "mcp", "add", server, "--client", client], dry)
+            except (subprocess.CalledProcessError, HarnessError) as exc:
+                failed.append(f"{server} -> {client}: {exc}")
+    return failed
+
+
+def sync(dry: bool = False) -> int:
+    manifest = load()
+    chosen = categories(manifest)
+    if not chosen:
+        print("no categories selected; run `harness.py onboard`")
+        return 1
+
+    failed: list[str] = []
+    for cat in chosen:
+        entries = manifest.get("skills", {}).get(cat, {})
+        if not entries:
+            continue
+        print(f"\n{cat} ({len(entries)})")
+        for source, spec in entries.items():
+            try:
+                install_skill(manifest, source, spec, dry)
+                print(f"  ok    {source}")
+            except (subprocess.CalledProcessError, HarnessError) as exc:
+                print(f"  FAIL  {source}: {exc}")
+                failed.append(source)
+
+    print("\nfan out to agent dirs")
+    if FANOUT.is_file():
+        try:
+            run(["bash", str(FANOUT)], dry)
+        except subprocess.CalledProcessError as exc:
+            failed.append(f"sync-skills.sh: {exc}")
+
+    if manifest.get("mcp"):
+        print("\nmcp")
+        failed += sync_mcp(manifest, dry)
+
+    total = len(sources(manifest))
+    print(f"\n{total - len(failed)}/{total} sources installed")
+    if failed:
+        print("failing: " + ", ".join(failed))
+    return 1 if failed else 0
+
+
+def status() -> int:
+    manifest = load()
+    chosen = set(categories(manifest))
+    installed = (len([p for p in SKILLS_DIR.iterdir() if p.is_dir()])
+                 if SKILLS_DIR.is_dir() else 0)
+    print(f"harness {revision()}")
+    print(f"  collection: {ROOT}")
+    print(f"  manifest:   {MANIFEST.name}")
+    print(f"  agents:     {manifest.get('agents', '')}")
+    print(f"  skills dir: {SKILLS_DIR}  ({installed} installed)")
+    print(f"  mcp:        {len(manifest.get('mcp', {}))} server(s)")
+    print(f"\n  {'CATEGORY':<12}REPOS")
+    for cat, entries in manifest.get("skills", {}).items():
+        mark = "*" if cat in chosen else "-"
+        print(f"  {mark} {cat:<10}{len(entries)}")
+    return 0
+
+
+def revision() -> str:
+    done = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True)
+    return done.stdout.strip() if done.returncode == 0 else "unknown"
+
+
+def quote(value: object) -> str:
+    if isinstance(value, dict):
+        return "{ " + ", ".join(f'{k} = "{v}"' for k, v in value.items()) + " }"
+    return "[" + ", ".join(f'"{s}"' for s in value) + "]"
+
+
+def save(source: str, spec: object, category: str) -> None:
+    """Append one line under its table, so the file's comments survive.
+
+    A rewrite through a serializer would be shorter and would throw away the
+    notes explaining why three servers are not on Smithery.
+    """
+    text = MANIFEST.read_text(encoding="utf-8")
+    if f'"{source}"' in text:
+        return
+    header = f"[skills.{category}]"
+    line = f'"{source}" = {quote(spec)}'
+    if header in text:
+        text = text.replace(header, f"{header}\n{line}", 1)
+    else:
+        text = text.rstrip("\n") + f"\n\n{header}\n{line}\n"
+    MANIFEST.write_text(text, encoding="utf-8")
+
+
+def add(source: str, skill: str | None, category: str, install: str | None,
+        no_save: bool, dry: bool) -> int:
+    spec: object = {"install": install} if install else ([skill] if skill else [])
+    if not no_save and not dry:
+        save(source, spec, category)
+    manifest = load()
+    install_skill(manifest, source, spec, dry)
+    if FANOUT.is_file():
+        run(["bash", str(FANOUT)], dry)
+    print(f"ok    {source}")
+    return 0
+
+
+def onboard() -> int:
+    """Pick categories. Writes `selected`, installs nothing by itself."""
+    manifest = load()
+    names = list(manifest.get("skills", {}))
+    labels = manifest.get("categories", {})
+    for index, name in enumerate(names, 1):
+        count = len(manifest["skills"][name])
+        print(f"  {index:>2}  {name:<10}{count:>3}  {labels.get(name, '')}")
+    reply = input("\ncategories to install (numbers, or blank for all): ").strip()
+    if not reply:
+        chosen = names
+    else:
+        try:
+            chosen = [names[int(n) - 1] for n in reply.replace(",", " ").split()]
+        except (ValueError, IndexError):
+            raise HarnessError(f"not a number in range 1-{len(names)}: {reply!r}")
+
+    text = MANIFEST.read_text(encoding="utf-8")
+    line = "selected = [" + ", ".join(f'"{c}"' for c in chosen) + "]"
+    if "\nselected = " in text:
+        text = "\n".join(line if l.startswith("selected = ") else l
+                         for l in text.splitlines()) + "\n"
+    else:
+        text = text.replace("\n[categories]", f"\n{line}\n\n[categories]", 1)
+    MANIFEST.write_text(text, encoding="utf-8")
+    print(f"selected: {', '.join(chosen)}\nnext: harness.py sync")
+    return 0
+
+
+def upgrade(dry: bool) -> int:
+    if (ROOT / ".git").exists():
+        run(["git", "-C", str(ROOT), "pull", "--ff-only"], dry)
+    return sync(dry)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("command", nargs="?", default="sync",
+                        choices=("sync", "status", "version", "add", "upgrade",
+                                 "onboard"))
+    parser.add_argument("source", nargs="?", help="owner/repo, for add")
+    parser.add_argument("skill", nargs="?", help="one skill name, for add")
+    parser.add_argument("--category", default="custom")
+    parser.add_argument("--install", help="run this script instead of npx skills")
+    parser.add_argument("--no-save", action="store_true")
+    parser.add_argument("--all", action="store_true",
+                        help="clear the selection, so every category installs")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        if args.all:
+            MANIFEST.write_text("\n".join(
+                l for l in MANIFEST.read_text(encoding="utf-8").splitlines()
+                if not l.startswith("selected = ")) + "\n", encoding="utf-8")
+        if args.command == "status":
+            return status()
+        if args.command == "version":
+            print(f"harness {revision()}\n  collection: {ROOT}\n"
+                  f"  skills:     {SKILLS_DIR}")
+            return 0
+        if args.command == "onboard":
+            return onboard()
+        if args.command == "upgrade":
+            return upgrade(args.dry_run)
+        if args.command == "add":
+            if not args.source:
+                parser.error("add needs owner/repo")
+            return add(args.source, args.skill, args.category, args.install,
+                       args.no_save, args.dry_run)
+        return sync(args.dry_run)
+    except HarnessError as refusal:
+        print(refusal, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
