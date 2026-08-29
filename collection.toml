@@ -48,7 +48,7 @@ security = "Static analysis and secure-code review"
 "https://github.com/anthropics/skills" = ["frontend-design"]
 "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
 "https://github.com/shadcn/ui" = ["shadcn"]
-"yoshi-ortiz/cyber-skills" = ["aesthetic", "ora"]
+"yoshi-ortiz/cyber-skills" = ["aesthetic", "build-context-token-vectors", "ora"]
 "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
 
 [skills.mobile]
