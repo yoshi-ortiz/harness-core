@@ -106,9 +106,10 @@ def run(argv: list[str], dry: bool, capture: bool = False,
                             stdin=subprocess.DEVNULL, text=True, errors="replace",
                             env=env)
     assert proc.stdout is not None
-    for line in proc.stdout:
-        sys.stdout.write(line)
-        seen.append(line)
+    with proc.stdout:
+        for line in proc.stdout:
+            sys.stdout.write(line)
+            seen.append(line)
     if proc.wait():
         raise subprocess.CalledProcessError(proc.returncode, argv)
     return "".join(seen)
@@ -170,8 +171,15 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
         script = script if script.is_absolute() else ROOT / script
         if not dry and not script.is_file():
             raise HarnessError(f"install script missing: {script}")
-        run(["bash", str(script)], dry)
-        return ""
+        argv = ["bash", str(script)]
+        if dry:
+            return run(argv, True)
+        with tempfile.TemporaryDirectory(prefix="harness-security-") as raw:
+            output = run(argv, False, capture=True, env=preflight_env(Path(raw)))
+        risk = risk_failure(output)
+        if risk:
+            raise SecurityRisk(f"security assessment failed: {risk}")
+        return run(argv, False)
 
     node_ready()
     named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]

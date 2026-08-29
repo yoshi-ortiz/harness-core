@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import harness
@@ -125,6 +126,26 @@ class ManifestTest(unittest.TestCase):
     def test_missing_security_table_fails_closed(self) -> None:
         self.assertEqual(harness.risk_failure("installation complete"),
                          "no security assessment returned")
+
+    def test_custom_installer_is_preflighted_before_real_home(self) -> None:
+        script = self.path.parent / "risky-installer.sh"
+        marker = self.path.parent / "real-install"
+        script.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$HOME\" = \"$REAL_HOME\" ]; then "
+            "touch \"$REAL_INSTALL\"; fi\n"
+            "printf '│  custom  Low Risk          0 alerts          Low Risk\\n'\n",
+            encoding="utf-8")
+        script.chmod(0o755)
+        with mock.patch.dict(os.environ, {
+                "HOME": str(self.path.parent / "real-home"),
+                "REAL_HOME": str(self.path.parent / "real-home"),
+                "REAL_INSTALL": str(marker)}):
+            with self.assertRaisesRegex(harness.SecurityRisk,
+                                        "security assessment failed"):
+                harness.install_skill(harness.load(), "owner/custom",
+                                      {"install": str(script)}, dry=False)
+        self.assertFalse(marker.exists(), "custom installer reached real home")
 
 
 class SecurityGateBlackBoxTest(unittest.TestCase):
