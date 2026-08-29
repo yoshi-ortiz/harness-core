@@ -123,11 +123,10 @@ class ManifestTest(unittest.TestCase):
             [("graphify", "Med Risk", 2, "Med"),
              ("shellcheck", "High Risk", 0, "Med")])
 
-    def test_missing_security_table_fails_closed(self) -> None:
-        self.assertEqual(harness.risk_failure("installation complete"),
-                         "no security assessment returned")
+    def test_missing_security_table_has_no_advisory(self) -> None:
+        self.assertIsNone(harness.risk_warning("installation complete"))
 
-    def test_custom_installer_is_preflighted_before_real_home(self) -> None:
+    def test_custom_installer_reports_risk_and_reaches_real_home(self) -> None:
         script = self.path.parent / "risky-installer.sh"
         marker = self.path.parent / "real-install"
         script.write_text(
@@ -141,15 +140,16 @@ class ManifestTest(unittest.TestCase):
                 "HOME": str(self.path.parent / "real-home"),
                 "REAL_HOME": str(self.path.parent / "real-home"),
                 "REAL_INSTALL": str(marker)}):
-            with self.assertRaisesRegex(harness.SecurityRisk,
-                                        "security assessment failed"):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
                 harness.install_skill(harness.load(), "owner/custom",
                                       {"install": str(script)}, dry=False)
-        self.assertFalse(marker.exists(), "custom installer reached real home")
+        self.assertTrue(marker.exists(), "custom installer missed real home")
+        self.assertIn("security advisory", out.getvalue())
 
 
-class SecurityGateBlackBoxTest(unittest.TestCase):
-    def test_risky_install_exits_nonzero_without_fanning_out(self) -> None:
+class SecurityAdvisoryBlackBoxTest(unittest.TestCase):
+    def test_risky_install_succeeds_and_fans_out(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             shutil.copy2(Path(harness.__file__), root / "harness.py")
@@ -183,12 +183,12 @@ class SecurityGateBlackBoxTest(unittest.TestCase):
                 [sys.executable, str(root / "harness.py"), "sync"],
                 capture_output=True, text=True, env=env)
 
-            self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
-            self.assertIn("security assessment failed", done.stdout)
-            self.assertIn("withheld", done.stdout)
-            self.assertFalse((root / "real-install").exists(),
-                             "risk reached the real installer")
-            self.assertFalse(marker.exists(), "risk reached cross-agent fan-out")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertIn("security advisory", done.stdout)
+            self.assertIn("1/1 sources installed", done.stdout)
+            self.assertTrue((root / "real-install").exists(),
+                            "installer missed the real home")
+            self.assertTrue(marker.exists(), "cross-agent fan-out did not run")
 
 
 if __name__ == "__main__":

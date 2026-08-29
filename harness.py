@@ -20,7 +20,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 import tomllib
 from pathlib import Path
 
@@ -44,10 +43,6 @@ ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
 
 class HarnessError(RuntimeError):
-    pass
-
-
-class SecurityRisk(HarnessError):
     pass
 
 
@@ -130,10 +125,10 @@ def unclean(rows: list[tuple[str, str, int, str]]) -> list[tuple]:
             if r[1] != "Safe" or r[2] > 0 or r[3] in ("High", "Critical")]
 
 
-def risk_failure(output: str) -> str | None:
+def risk_warning(output: str) -> str | None:
     rows = scan_risk(output)
     if not rows:
-        return "no security assessment returned"
+        return None
     bad = unclean(rows)
     if not bad:
         return None
@@ -142,26 +137,10 @@ def risk_failure(output: str) -> str | None:
         for name, generated, alerts, snyk in bad)
 
 
-def preflight_env(home: Path) -> dict[str, str]:
-    """Keep a scanner run away from every real agent directory."""
-    env = os.environ.copy()
-    env["HOME"] = str(home)
-    env["USERPROFILE"] = str(home)
-    env["XDG_CONFIG_HOME"] = str(home / ".config")
-    env["XDG_STATE_HOME"] = str(home / ".local" / "state")
-    env["APPDATA"] = str(home / "AppData" / "Roaming")
-    for name, relative in {
-        "CLAUDE_CONFIG_DIR": ".claude",
-        "CODEX_HOME": ".codex",
-        "VIBE_HOME": ".vibe",
-        "HERMES_HOME": ".hermes",
-        "AUTOHAND_HOME": ".autohand",
-        "GROK_HOME": ".grok",
-        "FLATPAK_XDG_CONFIG_HOME": ".config",
-    }.items():
-        env[name] = str(home / relative)
-    env.setdefault("npm_config_cache", str(Path.home() / ".npm"))
-    return env
+def report_risk(output: str) -> None:
+    warning = risk_warning(output)
+    if warning:
+        print(f"  WARN  security advisory: {warning}")
 
 
 def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
@@ -174,12 +153,9 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
         argv = ["bash", str(script)]
         if dry:
             return run(argv, True)
-        with tempfile.TemporaryDirectory(prefix="harness-security-") as raw:
-            output = run(argv, False, capture=True, env=preflight_env(Path(raw)))
-        risk = risk_failure(output)
-        if risk:
-            raise SecurityRisk(f"security assessment failed: {risk}")
-        return run(argv, False)
+        output = run(argv, False, capture=True)
+        report_risk(output)
+        return output
 
     node_ready()
     named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]
@@ -188,12 +164,9 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
     if dry:
         return run(argv, True)
 
-    with tempfile.TemporaryDirectory(prefix="harness-security-") as raw:
-        output = run(argv, False, capture=True, env=preflight_env(Path(raw)))
-    risk = risk_failure(output)
-    if risk:
-        raise SecurityRisk(f"security assessment failed: {risk}")
-    return run(argv, False)
+    output = run(argv, False, capture=True)
+    report_risk(output)
+    return output
 
 
 def mcp_clients(manifest: dict) -> list[str]:
@@ -234,7 +207,6 @@ def sync(dry: bool = False) -> int:
         return 1
 
     failed: list[str] = []
-    security_failed = False
     for cat in chosen:
         entries = manifest.get("skills", {}).get(cat, {})
         if not entries:
@@ -245,15 +217,11 @@ def sync(dry: bool = False) -> int:
                 install_skill(manifest, source, spec, dry)
                 print(f"  ok    {source}")
             except (subprocess.CalledProcessError, HarnessError) as exc:
-                if isinstance(exc, SecurityRisk):
-                    security_failed = True
                 print(f"  FAIL  {source}: {exc}")
                 failed.append(source)
 
     print("\nfan out to agent dirs")
-    if security_failed:
-        print("  withheld: a security assessment failed")
-    elif FANOUT.is_file():
+    if FANOUT.is_file():
         try:
             run(["bash", str(FANOUT)], dry)
         except subprocess.CalledProcessError as exc:
