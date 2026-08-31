@@ -32,6 +32,7 @@ two = "second"
 
 [skills.two]
 "owner/unselected" = []
+"owner/devtools" = []
 
 [mcp]
 "@vendor/server" = {}
@@ -83,6 +84,10 @@ class ManifestTest(unittest.TestCase):
 
     def test_naming_a_source_opts_into_an_unselected_category(self) -> None:
         self.assertIn("owner/unselected", self.sync_lines("unselected"))
+
+    def test_dev_matches_a_branch_not_a_repository_name(self) -> None:
+        text = self.sync_lines("dev")
+        self.assertNotIn("owner/devtools", text)
 
     def test_all_includes_hidden_categories_without_rewriting_the_manifest(self) -> None:
         before = self.path.read_text(encoding="utf-8")

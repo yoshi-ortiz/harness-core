@@ -70,6 +70,13 @@ def agent_flags(manifest: dict) -> list[str]:
     return str(manifest.get("agents", "")).split()
 
 
+def source_matches(source: str, only: str) -> bool:
+    """Match repository names loosely, but branch names exactly."""
+    if only in {"main", "dev", "alpha"}:
+        return source.rstrip("/").endswith("/" + only) or source.endswith(":" + only)
+    return only in source
+
+
 def node_ready() -> None:
     """nvm puts node on the PATH from a shell rc, which a non-login run never
     reads. Find it ourselves rather than failing under cron or an editor."""
@@ -224,7 +231,7 @@ def sync(dry: bool = False, only: str = "", include_all: bool = False) -> int:
     for cat in chosen:
         entries = {source: spec
                    for source, spec in manifest.get("skills", {}).get(cat, {}).items()
-                   if only in source}
+                   if source_matches(source, only)}
         if not entries:
             continue
         matched += len(entries)
