@@ -203,7 +203,14 @@ def sync_mcp(manifest: dict, dry: bool) -> list[str]:
     return failed
 
 
-def sync(dry: bool = False) -> int:
+def sync(dry: bool = False, only: str = "") -> int:
+    """Re-arm every source, or just the ones whose name contains `only`.
+
+    The filter exists because the full fan-out takes minutes over every repo,
+    and the common case after editing one's own skills is re-arming that one
+    repo. Substring, not a flag per source: `sync cyber-skills` is the whole
+    interface, and it needs no entry in the manifest to keep in step.
+    """
     manifest = load()
     chosen = categories(manifest)
     if not chosen:
@@ -211,10 +218,14 @@ def sync(dry: bool = False) -> int:
         return 1
 
     failed: list[str] = []
+    matched = 0
     for cat in chosen:
-        entries = manifest.get("skills", {}).get(cat, {})
+        entries = {source: spec
+                   for source, spec in manifest.get("skills", {}).get(cat, {}).items()
+                   if only in source}
         if not entries:
             continue
+        matched += len(entries)
         print(f"\n{cat} ({len(entries)})")
         for source, spec in entries.items():
             try:
@@ -224,6 +235,10 @@ def sync(dry: bool = False) -> int:
                 print(f"  FAIL  {source}: {exc}")
                 failed.append(source)
 
+    if only and not matched:
+        print(f"no source matches {only!r}; `harness.py status` lists them")
+        return 1
+
     print("\nfan out to agent dirs")
     if FANOUT.is_file():
         try:
@@ -231,11 +246,13 @@ def sync(dry: bool = False) -> int:
         except subprocess.CalledProcessError as exc:
             failed.append(f"sync-skills.sh: {exc}")
 
-    if manifest.get("mcp"):
+    # A filtered run named one repo. Re-arming every MCP server on the way past
+    # is the fan-out the filter existed to avoid.
+    if manifest.get("mcp") and not only:
         print("\nmcp")
         failed += sync_mcp(manifest, dry)
 
-    total = len(sources(manifest))
+    total = matched if only else len(sources(manifest))
     print(f"\n{total - len(failed)}/{total} sources installed")
     if failed:
         print("failing: " + ", ".join(failed))
@@ -343,7 +360,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("command", nargs="?", default="sync",
                         choices=("sync", "status", "version", "add", "upgrade",
                                  "onboard"))
-    parser.add_argument("source", nargs="?", help="owner/repo, for add")
+    parser.add_argument("source", nargs="?",
+                        help="owner/repo for add; a name to match for sync")
     parser.add_argument("skill", nargs="?", help="one skill name, for add")
     parser.add_argument("--category", default="custom")
     parser.add_argument("--install", help="run this script instead of npx skills")
@@ -373,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("add needs owner/repo")
             return add(args.source, args.skill, args.category, args.install,
                        args.no_save, args.dry_run)
-        return sync(args.dry_run)
+        return sync(args.dry_run, args.source or "")
     except HarnessError as refusal:
         print(refusal, file=sys.stderr)
         return 2

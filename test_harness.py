@@ -69,6 +69,36 @@ class ManifestTest(unittest.TestCase):
         self.assertNotIn("npx", line)
         self.assertTrue(line.endswith("scripts/thing.sh"), line)
 
+    def sync_lines(self, only: str = "") -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            harness.sync(dry=True, only=only)
+        return out.getvalue()
+
+    def test_a_filter_syncs_only_the_sources_whose_name_matches(self) -> None:
+        text = self.sync_lines("some")
+        self.assertIn("owner/some", text)
+        self.assertNotIn("owner/all", text)
+        self.assertIn("1/1 sources installed", text)
+
+    def test_no_filter_still_syncs_every_selected_source(self) -> None:
+        text = self.sync_lines()
+        for source in ("owner/all", "owner/some", "owner/script"):
+            self.assertIn(source, text)
+
+    def test_a_filter_matching_nothing_refuses_rather_than_reporting_success(self) -> None:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = harness.sync(dry=True, only="nonsuch")
+        self.assertEqual(code, 1)
+        self.assertIn("no source matches", out.getvalue())
+
+    def test_a_filtered_run_leaves_the_mcp_servers_alone(self) -> None:
+        # The filter named one repo. Re-arming every MCP server on the way past
+        # is the fan-out it existed to avoid.
+        self.assertNotIn("@vendor/server", self.sync_lines("some"))
+        self.assertIn("@vendor/server", self.sync_lines())
+
     def test_selection_hides_a_category_without_deleting_it(self) -> None:
         manifest = harness.load()
         self.assertEqual(harness.categories(manifest), ["one"])

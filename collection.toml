@@ -48,11 +48,11 @@ security = "Static analysis and secure-code review"
 "https://github.com/anthropics/skills" = ["frontend-design"]
 "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
 "https://github.com/shadcn/ui" = ["shadcn"]
-# Own repo, three channels. `main` is the stable tree, `alpha` adds the skills
-# that have not graduated to it, and `cook` is fog on both so it only ever
-# exists on `dev`.
-"yoshi-ortiz/cyber-skills" = []
-"https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = ["genesis", "knowledge", "silly"]
+# Own repo. `alpha` is a superset of `main`, so one bare entry is every skill
+# that is not a sketch, and a new one arrives without editing this line.
+# `cook` is fog: it exists only on `dev`, and it is named rather than taken
+# bare because `dev` also carries local scratch skills that are not the package.
+"https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = []
 "https://github.com/yoshi-ortiz/cyber-skills/tree/dev" = ["cook"]
 "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
 
