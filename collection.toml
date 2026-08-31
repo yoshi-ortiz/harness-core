@@ -54,7 +54,12 @@ unreleased = "Explicit opt-in skills from development branches"
 "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
 
 [skills.unreleased]
-"https://github.com/yoshi-ortiz/cyber-skills/tree/dev" = []
+# `alpha` is the generated, fog-free publication of `dev`, built by that repo's
+# tools/publish.py. Installing from `dev` itself ships its development fog --
+# a dev-only test harness, one design project's state, the roadmap -- because
+# `npx skills add` walks the tree for SKILL.md and knows nothing about that
+# repo's fog convention.
+"https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = []
 
 [skills.mobile]
 "ratacat/claude-skills" = ["xcode-test"]
