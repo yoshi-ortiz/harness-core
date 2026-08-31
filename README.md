@@ -56,6 +56,7 @@ research (5)
 | --- | --- |
 | `harness onboard` | Pick agents + categories, then install |
 | `harness sync` | Install what's selected |
+| `harness sync <source>` | Explicitly install one source, including unreleased |
 | `harness status` | What's selected, detected, installed |
 | `harness upgrade` | Pull, refresh tools, reinstall at latest |
 | `harness add <owner/repo> [skill]` | Add a skill — manifest + install + sync |
@@ -65,28 +66,23 @@ research (5)
 `npx skills add` with the manifest entry and the cross-agent sync added.
 
 Flags: `--dry-run` prints commands instead of running them, `--no-save` installs
-without touching the manifest, `--category <name>` files a new skill, `--all`
-clears the selection so everything installs.
+without touching the manifest, `--category <name>` files a new skill, and
+`--all` includes unreleased categories for one contributor run.
 
 Upgrading is just re-running: `skills add` and `smithery mcp add` are idempotent
 re-fetches, so `harness upgrade` pulls the manifest, refreshes yq and smithery,
 and reinstalls every selected entry at its latest version.
 
-## collection.yaml
+## collection.toml
 
-```yaml
-agents: "-a claude-code -a codex …"   # flag string; `onboard` rewrites this
-selected: [research, design]          # categories to install; absent = all
-categories:
-  research: One-line pitch shown in the picker
-skills:
-  research:                           # skills nest under a category
-    owner/repo:                       #   bare  → every skill in the repo
-    owner/repo: [one, two]            #   list  → just those
-    owner/repo:
-      install: scripts/custom.sh      #   map   → run this instead
-mcp:
-  server-id:                          # Smithery IDs, verified installable
+```toml
+agents = "-a claude-code -a codex"
+selected = ["research", "design"]
+
+[skills.research]
+"owner/all" = []
+"owner/some" = ["one", "two"]
+"owner/custom" = { install = "scripts/custom.sh" }
 ```
 
 Editing the file installs nothing — run `harness sync`.

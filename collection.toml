@@ -13,8 +13,9 @@
 
 agents = "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a pi -a zed"
 
-# Absent means every category. An empty list means none.
-# selected = ["research", "coding"]
+# Stable categories install by default. Contributors use `--all`; final users
+# may opt into one unreleased source by naming it after `sync`.
+selected = ["research", "coding", "web", "design", "mobile", "infra", "security"]
 
 [categories]
 research = "Knowledge graphs, docs lookup, multi-agent review"
@@ -24,6 +25,7 @@ design = "Design systems, component libraries, and UI craft"
 mobile = "iOS and Xcode build/test tooling"
 infra = "Terraform, cloud images, and provider development"
 security = "Static analysis and secure-code review"
+unreleased = "Explicit opt-in skills from development branches"
 
 [skills.research]
 "safishamsi/graphify" = []
@@ -48,13 +50,11 @@ security = "Static analysis and secure-code review"
 "https://github.com/anthropics/skills" = ["frontend-design"]
 "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
 "https://github.com/shadcn/ui" = ["shadcn"]
-# Own repo. `alpha` is a superset of `main`, so one bare entry is every skill
-# that is not a sketch, and a new one arrives without editing this line.
-# `cook` is fog: it exists only on `dev`, and it is named rather than taken
-# bare because `dev` also carries local scratch skills that are not the package.
-"https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = []
-"https://github.com/yoshi-ortiz/cyber-skills/tree/dev" = ["cook"]
+"https://github.com/yoshi-ortiz/cyber-skills/tree/main" = []
 "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
+
+[skills.unreleased]
+"https://github.com/yoshi-ortiz/cyber-skills/tree/dev" = []
 
 [skills.mobile]
 "ratacat/claude-skills" = ["xcode-test"]

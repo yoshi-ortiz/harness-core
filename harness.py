@@ -203,7 +203,7 @@ def sync_mcp(manifest: dict, dry: bool) -> list[str]:
     return failed
 
 
-def sync(dry: bool = False, only: str = "") -> int:
+def sync(dry: bool = False, only: str = "", include_all: bool = False) -> int:
     """Re-arm every source, or just the ones whose name contains `only`.
 
     The filter exists because the full fan-out takes minutes over every repo,
@@ -212,7 +212,9 @@ def sync(dry: bool = False, only: str = "") -> int:
     interface, and it needs no entry in the manifest to keep in step.
     """
     manifest = load()
-    chosen = categories(manifest)
+    # Naming a source is an explicit opt-in, even when its category is hidden.
+    chosen = (list(manifest.get("skills", {}))
+              if only or include_all else categories(manifest))
     if not chosen:
         print("no categories selected; run `harness.py onboard`")
         return 1
@@ -252,7 +254,7 @@ def sync(dry: bool = False, only: str = "") -> int:
         print("\nmcp")
         failed += sync_mcp(manifest, dry)
 
-    total = matched if only else len(sources(manifest))
+    total = matched
     print(f"\n{total - len(failed)}/{total} sources installed")
     if failed:
         print("failing: " + ", ".join(failed))
@@ -349,10 +351,10 @@ def onboard() -> int:
     return 0
 
 
-def upgrade(dry: bool) -> int:
+def upgrade(dry: bool, include_all: bool = False) -> int:
     if (ROOT / ".git").exists():
         run(["git", "-C", str(ROOT), "pull", "--ff-only"], dry)
-    return sync(dry)
+    return sync(dry, include_all=include_all)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,15 +369,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--install", help="run this script instead of npx skills")
     parser.add_argument("--no-save", action="store_true")
     parser.add_argument("--all", action="store_true",
-                        help="clear the selection, so every category installs")
+                        help="include hidden categories for this run")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        if args.all:
-            MANIFEST.write_text("\n".join(
-                l for l in MANIFEST.read_text(encoding="utf-8").splitlines()
-                if not l.startswith("selected = ")) + "\n", encoding="utf-8")
         if args.command == "status":
             return status()
         if args.command == "version":
@@ -385,13 +383,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "onboard":
             return onboard()
         if args.command == "upgrade":
-            return upgrade(args.dry_run)
+            return upgrade(args.dry_run, args.all)
         if args.command == "add":
             if not args.source:
                 parser.error("add needs owner/repo")
             return add(args.source, args.skill, args.category, args.install,
                        args.no_save, args.dry_run)
-        return sync(args.dry_run, args.source or "")
+        return sync(args.dry_run, args.source or "", args.all)
     except HarnessError as refusal:
         print(refusal, file=sys.stderr)
         return 2

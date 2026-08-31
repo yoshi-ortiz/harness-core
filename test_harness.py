@@ -81,6 +81,17 @@ class ManifestTest(unittest.TestCase):
         self.assertNotIn("owner/all", text)
         self.assertIn("1/1 sources installed", text)
 
+    def test_naming_a_source_opts_into_an_unselected_category(self) -> None:
+        self.assertIn("owner/unselected", self.sync_lines("unselected"))
+
+    def test_all_includes_hidden_categories_without_rewriting_the_manifest(self) -> None:
+        before = self.path.read_text(encoding="utf-8")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            harness.sync(dry=True, include_all=True)
+        self.assertIn("owner/unselected", out.getvalue())
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
     def test_no_filter_still_syncs_every_selected_source(self) -> None:
         text = self.sync_lines()
         for source in ("owner/all", "owner/some", "owner/script"):
