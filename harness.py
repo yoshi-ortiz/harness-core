@@ -159,8 +159,12 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
 
     node_ready()
     named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]
+    # --full-depth or a monorepo hands out one skill. `npx skills add` stops at
+    # the first root SKILL.md, so a repo that groups skills under directories
+    # (first/aesthetic, kit/spanish/ora) silently installs only the root one and
+    # still exits 0. Cheap on a flat repo, load-bearing on a nested one.
     argv = ["npx", "skills", "add", source, "-g", *agent_flags(manifest),
-            *(named or ["--skill", "*"]), "-y"]
+            *(named or ["--skill", "*"]), "--full-depth", "-y"]
     if dry:
         return run(argv, True)
 
