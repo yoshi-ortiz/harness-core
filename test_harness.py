@@ -239,3 +239,24 @@ class SecurityAdvisoryBlackBoxTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DevResolvesToTheUnreleasedChannel(unittest.TestCase):
+    """`dev` is the branch people say; `alpha` is the fog-free publication of
+    it that is actually listed. Renaming the entry silently broke `sync dev`."""
+
+    def test_dev_matches_the_alpha_entry(self):
+        self.assertTrue(harness.source_matches(
+            "https://github.com/yoshi-ortiz/cyber-skills/tree/alpha", "dev"))
+
+    def test_dev_does_not_match_main(self):
+        self.assertFalse(harness.source_matches(
+            "https://github.com/yoshi-ortiz/cyber-skills/tree/main", "dev"))
+
+    def test_alpha_still_matches_itself(self):
+        self.assertTrue(harness.source_matches(
+            "https://github.com/yoshi-ortiz/cyber-skills/tree/alpha", "alpha"))
+
+    def test_a_repo_name_still_matches_loosely(self):
+        self.assertTrue(harness.source_matches(
+            "https://github.com/yoshi-ortiz/cyber-skills/tree/alpha", "cyber-skills"))

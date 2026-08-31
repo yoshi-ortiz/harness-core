@@ -70,8 +70,15 @@ def agent_flags(manifest: dict) -> list[str]:
     return str(manifest.get("agents", "")).split()
 
 
+# `dev` is where the work happens; `alpha` is its generated, fog-free
+# publication and the branch actually listed. Asking for `dev` means "the
+# unreleased channel", so it resolves there rather than matching nothing.
+CHANNEL_ALIAS = {"dev": "alpha"}
+
+
 def source_matches(source: str, only: str) -> bool:
     """Match repository names loosely, but branch names exactly."""
+    only = CHANNEL_ALIAS.get(only, only)
     if only in {"main", "dev", "alpha"}:
         return source.rstrip("/").endswith("/" + only) or source.endswith(":" + only)
     return only in source
