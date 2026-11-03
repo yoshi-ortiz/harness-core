@@ -169,6 +169,13 @@ class ManifestTest(unittest.TestCase):
             [("graphify", "Med Risk", 2, "Med"),
              ("shellcheck", "High Risk", 0, "Med")])
 
+    def test_a_folder_named_after_a_builtin_command_is_flagged(self) -> None:
+        # mem0's `resume` skill took over Claude Code's /resume this way.
+        skills = self.path.parent / "skills"
+        for name in ("resume", "mem0-resume", "kit"):
+            (skills / name).mkdir(parents=True)
+        self.assertEqual(harness.shadowed(skills), ["resume"])
+
     def test_missing_security_table_has_no_advisory(self) -> None:
         self.assertIsNone(harness.risk_warning("installation complete"))
 

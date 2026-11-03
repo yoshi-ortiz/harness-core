@@ -41,6 +41,20 @@ RISK_ROW = re.compile(
     re.MULTILINE)
 ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
+# `npx skills add` names the folder after the repo's directory, not the skill's
+# frontmatter, and `-y` overwrites whatever held that name. mem0's
+# `skills/resume` (name: mem0-resume) landed as `~/.agents/skills/resume` and
+# shadowed Claude Code's built-in /resume. A skill folder named after a
+# built-in command takes the command over, so sync refuses to call that ok.
+BUILTIN_COMMANDS = frozenset({
+    "add-dir", "agents", "bug", "clear", "compact", "config", "context", "cost",
+    "doctor", "exit", "export", "feedback", "help", "hooks", "ide", "init",
+    "login", "logout", "mcp", "memory", "model", "output-style", "permissions",
+    "plugin", "pr-comments", "release-notes", "resume", "review", "rewind",
+    "sandbox", "security-review", "skills", "stats", "status", "statusline",
+    "tasks", "terminal-setup", "theme", "todos", "upgrade", "usage", "vim",
+})
+
 
 class HarnessError(RuntimeError):
     pass
@@ -187,6 +201,15 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
     return output
 
 
+def shadowed(skills_dir: Path | None = None) -> list[str]:
+    """Installed skill folders whose name takes over a built-in command."""
+    skills_dir = skills_dir or SKILLS_DIR
+    if not skills_dir.is_dir():
+        return []
+    return sorted(p.name for p in skills_dir.iterdir()
+                  if p.name in BUILTIN_COMMANDS)
+
+
 def mcp_clients(manifest: dict) -> list[str]:
     flags = agent_flags(manifest)
     agents = [flags[i + 1] for i, flag in enumerate(flags)
@@ -255,6 +278,12 @@ def sync(dry: bool = False, only: str = "", include_all: bool = False) -> int:
         print(f"no source matches {only!r}; `harness.py status` lists them")
         return 1
 
+    # Checked before fan-out, so a shadowing folder is not copied into every app.
+    for name in [] if dry else shadowed():
+        print(f"  FAIL  {name}: shadows built-in /{name}; rename "
+              f"{SKILLS_DIR / name} to the skill's frontmatter name")
+        failed.append(f"shadows /{name}")
+
     print("\nfan out to agent dirs")
     if FANOUT.is_file():
         try:
@@ -290,7 +319,11 @@ def status() -> int:
     for cat, entries in manifest.get("skills", {}).items():
         mark = "*" if cat in chosen else "-"
         print(f"  {mark} {cat:<10}{len(entries)}")
-    return 0
+    clashes = shadowed()
+    if clashes:
+        print("\n  shadowing built-in commands: "
+              + ", ".join(f"/{name}" for name in clashes))
+    return 1 if clashes else 0
 
 
 def revision() -> str:
