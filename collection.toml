@@ -47,11 +47,16 @@ unreleased = "Explicit opt-in skills from development branches"
 "GoogleChrome/modern-web-guidance" = []
 
 [skills.design]
-"https://github.com/anthropics/skills" = ["frontend-design"]
+"https://github.com/anthropics/skills" = ["algorithmic-art", "canvas-design", "frontend-design", "theme-factory"]
 "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
 "https://github.com/shadcn/ui" = ["shadcn"]
 "https://github.com/yoshi-ortiz/cyber-skills/tree/main" = []
 "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
+"emilkowalski/skills" = ["emil-design-eng", "apple-design", "animate", "improve-animations", "review-animations", "animation-vocabulary", "ask-sonner", "find-animation-opportunities", "pick-ui-library"]
+# Paul Bakaus (jQuery UI). Apache-2.0, 61 deterministic detector rules, no LLM.
+# Bare: the repo resolves to exactly one skill. Hazard: `/impeccable init`
+# writes a global DESIGN.md -- never run inside a project checkout.
+"pbakaus/impeccable" = []
 
 [skills.unreleased]
 # `alpha` is the generated, fog-free publication of `dev`, built by that repo's
@@ -83,3 +88,8 @@ unreleased = "Explicit opt-in skills from development branches"
 #   figma       built into the Figma desktop app (Preferences -> enable MCP server)
 #   shadcn      npx shadcn@latest mcp init
 #   blender     a git URL, which Smithery needs `--name <alias>` for
+
+[skills.custom]
+"HubSpot/agent-cli-skills" = []
+"catalystbyzoho/agent-skills" = []
+"cloudflare/skills" = ["cloudflare"]
