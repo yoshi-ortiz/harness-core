@@ -19,6 +19,10 @@ agents = "-a claude-code -a antigravity -a antigravity-cli -a codex -a cursor -a
 # may opt into one unreleased source by naming it after `sync`.
 selected = ["research", "coding", "web", "design", "mobile", "infra", "security"]
 
+# Sources whose skills no cleanup may switch off. `harness.py status` fails while
+# Claude Code's skillOverrides has any of them "off" (cyber-skills B-036).
+protected = ["yoshi-ortiz/cyber-skills"]
+
 [categories]
 research = "Knowledge graphs, docs lookup, multi-agent review"
 coding = "Workflow, planning, and language-agnostic engineering practice"

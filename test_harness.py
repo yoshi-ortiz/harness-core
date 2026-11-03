@@ -44,11 +44,13 @@ class ManifestTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "collection.toml"
         self.path.write_text(MANIFEST, encoding="utf-8")
-        self._saved = harness.MANIFEST
+        self._saved = harness.MANIFEST, harness.SKILLS_DIR
         harness.MANIFEST = self.path
+        # A clash on this machine must not fail a test about something else.
+        harness.SKILLS_DIR = Path(self.tmp.name) / "installed"
 
     def tearDown(self) -> None:
-        harness.MANIFEST = self._saved
+        harness.MANIFEST, harness.SKILLS_DIR = self._saved
         self.tmp.cleanup()
 
     def emit(self, source: str, spec: object) -> str:
@@ -170,11 +172,42 @@ class ManifestTest(unittest.TestCase):
              ("shellcheck", "High Risk", 0, "Med")])
 
     def test_a_folder_named_after_a_builtin_command_is_flagged(self) -> None:
-        # mem0's `resume` skill took over Claude Code's /resume this way.
         skills = self.path.parent / "skills"
-        for name in ("resume", "mem0-resume", "kit"):
+        for name in ("resume", "mem0-resume", "kit", "pocock-review"):
             (skills / name).mkdir(parents=True)
-        self.assertEqual(harness.shadowed(skills), ["resume"])
+        (skills / "pocock-review" / "SKILL.md").write_text("---\nname: review\n---\n")
+        (skills / "mem0-resume" / "SKILL.md").write_text("---\nname: mem0-resume\n---\n")
+        self.assertEqual(harness.shadowed(harness.installed(skills), skills),
+                         ["pocock-review", "resume"])
+
+    def test_a_builtin_name_is_refused_before_install(self) -> None:
+        listing = "│\n│    mem0\n│\n│      Mem0 SDK.\n│    resume\n│\n│      Resume capture.\n"
+        out = io.StringIO()
+        with mock.patch.object(harness, "listed",
+                               lambda _: harness.LISTED.findall(listing)), \
+                mock.patch.object(harness, "node_ready"), \
+                mock.patch.object(harness, "run", return_value="") as run, \
+                contextlib.redirect_stdout(out):
+            harness.install_skill(harness.load(), "mem0ai/mem0", [], dry=False)
+        argv = run.call_args[0][0]
+        self.assertIn("mem0", argv)
+        self.assertNotIn("resume", argv)
+        self.assertNotIn("*", argv)
+        self.assertIn("SKIP  resume", out.getvalue())
+
+    def test_a_protected_skill_switched_off_is_reported(self) -> None:
+        home = self.path.parent
+        (home / "settings.json").write_text(
+            '{"skillOverrides": {"kit": "off", "mem0": "off", "first": "on"}}')
+        (home / "lock.json").write_text(
+            '{"skills": {"kit": {"source": "yoshi-ortiz/cyber-skills"},'
+            ' "first": {"source": "yoshi-ortiz/cyber-skills"},'
+            ' "mem0": {"source": "mem0ai/mem0"}}}')
+        with mock.patch.object(harness, "CLAUDE_SETTINGS", home / "settings.json"), \
+                mock.patch.object(harness, "LOCK", home / "lock.json"):
+            self.assertEqual(harness.disabled_protected(
+                {"protected": ["yoshi-ortiz/cyber-skills"]}), ["kit"])
+            self.assertEqual(harness.disabled_protected({}), [])
 
     def test_missing_security_table_has_no_advisory(self) -> None:
         self.assertIsNone(harness.risk_warning("installation complete"))

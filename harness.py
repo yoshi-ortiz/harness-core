@@ -15,6 +15,7 @@ the cross-agent fan-out. This owns the manifest, the selection, and the order.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -41,19 +42,44 @@ RISK_ROW = re.compile(
     re.MULTILINE)
 ANSI = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
-# `npx skills add` names the folder after the repo's directory, not the skill's
-# frontmatter, and `-y` overwrites whatever held that name. mem0's
-# `skills/resume` (name: mem0-resume) landed as `~/.agents/skills/resume` and
-# shadowed Claude Code's built-in /resume. A skill folder named after a
-# built-in command takes the command over, so sync refuses to call that ok.
-BUILTIN_COMMANDS = frozenset({
-    "add-dir", "agents", "bug", "clear", "compact", "config", "context", "cost",
-    "doctor", "exit", "export", "feedback", "help", "hooks", "ide", "init",
-    "login", "logout", "mcp", "memory", "model", "output-style", "permissions",
-    "plugin", "pr-comments", "release-notes", "resume", "review", "rewind",
-    "sandbox", "security-review", "skills", "stats", "status", "statusline",
-    "tasks", "terminal-setup", "theme", "todos", "upgrade", "usage", "vim",
-})
+# Names a skill must not take, per app it fans out to; see cyber-skills B-036.
+# Read from each app's own binary; update with the app, never ahead of it.
+RESERVED = {
+    # Claude Code 2.1.309: slash commands, then bundled skills.
+    "claude-code": frozenset({
+        "add-dir", "agents", "bug", "clear", "compact", "config", "context",
+        "cost", "doctor", "exit", "export", "feedback", "help", "hooks", "ide",
+        "init", "login", "logout", "mcp", "memory", "model", "output-style",
+        "permissions", "plugin", "pr-comments", "release-notes", "resume",
+        "review", "rewind", "sandbox", "security-review", "skills", "stats",
+        "status", "statusline", "tasks", "terminal-setup", "theme", "todos",
+        "upgrade", "usage", "vim",
+        "claude-api", "code-review", "dataviz", "fewer-permission-prompts",
+        "keybindings-help", "loop", "plugin-authoring", "run", "schedule",
+        "simplify", "update-config",
+    }),
+    # Codex 0.163.0.
+    "codex": frozenset({
+        "app", "archive", "btw", "cd", "compact", "daemon", "debug-config",
+        "export", "ide", "import", "init", "logout", "model", "new", "pets",
+        "ps", "pwd", "raw", "recap", "rename", "review", "rollout",
+        "setup-default-sandbox", "side", "statusline", "vim", "worktree",
+    }),
+    # cursor-agent, as installed at ~/.local/bin.
+    "cursor": frozenset({
+        "about", "ask", "auto-run", "btw", "changes", "clear", "commit",
+        "compress", "config", "context", "copy-conversation-id",
+        "copy-request-id", "exit", "feedback", "help", "logout", "max-mode",
+        "mcp", "model", "plan", "plugin", "quit", "rename", "resume", "rewind",
+        "sandbox", "setup-terminal", "shell", "skills", "usage", "vim",
+    }),
+}
+BUILTIN_COMMANDS = frozenset().union(*RESERVED.values())
+# `npx skills add <repo> -l` prints each skill name on its own indented line.
+LISTED = re.compile(r"^│ {4}(\S+)\s*$", re.M)
+CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
+LOCK = Path.home() / ".agents" / ".skill-lock.json"
+FRONTMATTER_NAME = re.compile(r"\A---\n(?:.*\n)*?name:\s*['\"]?([^'\"\n]+)", re.M)
 
 
 class HarnessError(RuntimeError):
@@ -186,7 +212,16 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
         return output
 
     node_ready()
-    named = [flag for skill in (spec or []) for flag in ("-s", str(skill))]
+    # Refuse a built-in's name before `-y` can write it, not after.
+    wanted = [str(skill) for skill in spec or []] or ([] if dry else listed(source))
+    blocked = [name for name in wanted if name in BUILTIN_COMMANDS]
+    for name in blocked:
+        print(f"  SKIP  {name}: would take over a built-in command; see cyber-skills B-036")
+    wanted = [name for name in wanted if name not in BUILTIN_COMMANDS]
+    if blocked and not wanted:
+        return ""
+    named = ([flag for skill in wanted for flag in ("-s", skill)]
+             if spec or blocked else [])
     # --full-depth or a monorepo hands out one skill. `npx skills add` stops at
     # the first root SKILL.md, so a repo that groups skills under directories
     # (first/aesthetic, kit/spanish/ora) silently installs only the root one and
@@ -201,13 +236,64 @@ def install_skill(manifest: dict, source: str, spec: object, dry: bool) -> str:
     return output
 
 
-def shadowed(skills_dir: Path | None = None) -> list[str]:
-    """Installed skill folders whose name takes over a built-in command."""
+def listed(source: str) -> list[str]:
+    """Skill names a source would install, read without installing any."""
+    done = subprocess.run(["npx", "skills", "add", source, "-l", "--full-depth"],
+                          capture_output=True, text=True, errors="replace",
+                          stdin=subprocess.DEVNULL)
+    return LISTED.findall(ANSI.sub("", done.stdout)) if done.returncode == 0 else []
+
+
+def disabled_protected(manifest: dict) -> list[str]:
+    """Skills from a `protected` source that Claude Code has switched off."""
+    protected = manifest.get("protected", [])
+    try:
+        overrides = json.loads(CLAUDE_SETTINGS.read_text()).get("skillOverrides", {})
+        lock = json.loads(LOCK.read_text()).get("skills", {})
+    except (OSError, ValueError):
+        return []
+    return sorted(name for name, state in overrides.items()
+                  if state == "off" and any(
+                      p in lock.get(name, {}).get("source", "") for p in protected))
+
+
+def installed(skills_dir: Path | None = None) -> list[str]:
     skills_dir = skills_dir or SKILLS_DIR
     if not skills_dir.is_dir():
         return []
-    return sorted(p.name for p in skills_dir.iterdir()
-                  if p.name in BUILTIN_COMMANDS)
+    return sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
+
+
+def skill_name(folder: Path) -> str | None:
+    try:
+        found = FRONTMATTER_NAME.search((folder / "SKILL.md").read_text(errors="ignore"))
+    except OSError:
+        return None
+    return found.group(1).strip() if found else None
+
+
+def shadowed(names: list[str], skills_dir: Path | None = None) -> list[str]:
+    """Installed skills whose folder or frontmatter name takes over a built-in."""
+    skills_dir = skills_dir or SKILLS_DIR
+    return [name for name in names
+            if name in BUILTIN_COMMANDS
+            or skill_name(skills_dir / name) in BUILTIN_COMMANDS]
+
+
+def fan_out(dry: bool) -> list[str]:
+    """Copy skills into every app, unless one would take over a built-in."""
+    clashes = shadowed(installed())
+    for name in clashes:
+        print(f"  FAIL  {name}: shadows a built-in command; see cyber-skills B-036")
+    if clashes:
+        return [f"{name} shadows a built-in" for name in clashes]
+    print("\nfan out to agent dirs")
+    if FANOUT.is_file():
+        try:
+            run(["bash", str(FANOUT)], dry)
+        except subprocess.CalledProcessError as exc:
+            return [f"sync-skills.sh: {exc}"]
+    return []
 
 
 def mcp_clients(manifest: dict) -> list[str]:
@@ -278,18 +364,7 @@ def sync(dry: bool = False, only: str = "", include_all: bool = False) -> int:
         print(f"no source matches {only!r}; `harness.py status` lists them")
         return 1
 
-    # Checked before fan-out, so a shadowing folder is not copied into every app.
-    for name in [] if dry else shadowed():
-        print(f"  FAIL  {name}: shadows built-in /{name}; rename "
-              f"{SKILLS_DIR / name} to the skill's frontmatter name")
-        failed.append(f"shadows /{name}")
-
-    print("\nfan out to agent dirs")
-    if FANOUT.is_file():
-        try:
-            run(["bash", str(FANOUT)], dry)
-        except subprocess.CalledProcessError as exc:
-            failed.append(f"sync-skills.sh: {exc}")
+    failed += fan_out(dry)
 
     # A filtered run named one repo. Re-arming every MCP server on the way past
     # is the fan-out the filter existed to avoid.
@@ -307,23 +382,25 @@ def sync(dry: bool = False, only: str = "", include_all: bool = False) -> int:
 def status() -> int:
     manifest = load()
     chosen = set(categories(manifest))
-    installed = (len([p for p in SKILLS_DIR.iterdir() if p.is_dir()])
-                 if SKILLS_DIR.is_dir() else 0)
+    names = installed()
     print(f"harness {revision()}")
     print(f"  collection: {ROOT}")
     print(f"  manifest:   {MANIFEST.name}")
     print(f"  agents:     {manifest.get('agents', '')}")
-    print(f"  skills dir: {SKILLS_DIR}  ({installed} installed)")
+    print(f"  skills dir: {SKILLS_DIR}  ({len(names)} installed)")
     print(f"  mcp:        {len(manifest.get('mcp', {}))} server(s)")
     print(f"\n  {'CATEGORY':<12}REPOS")
     for cat, entries in manifest.get("skills", {}).items():
         mark = "*" if cat in chosen else "-"
         print(f"  {mark} {cat:<10}{len(entries)}")
-    clashes = shadowed()
+    clashes = shadowed(names)
     if clashes:
-        print("\n  shadowing built-in commands: "
-              + ", ".join(f"/{name}" for name in clashes))
-    return 1 if clashes else 0
+        print("\n  shadowing built-in commands: " + ", ".join(clashes))
+    off = disabled_protected(manifest)
+    if off:
+        print("\n  protected skills switched off in Claude Code: " + ", ".join(off)
+              + f"\n  remove them from skillOverrides in {CLAUDE_SETTINGS}")
+    return 1 if clashes or off else 0
 
 
 def revision() -> str:
@@ -363,8 +440,8 @@ def add(source: str, skill: str | None, category: str, install: str | None,
         save(source, spec, category)
     manifest = load()
     install_skill(manifest, source, spec, dry)
-    if FANOUT.is_file():
-        run(["bash", str(FANOUT)], dry)
+    if fan_out(dry):
+        return 1
     print(f"ok    {source}")
     return 0
 
