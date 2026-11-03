@@ -3,6 +3,8 @@
 # agents:     flag string for `npx skills add -g`. `harness onboard` rewrites
 #             this from the agents actually installed on the box.
 # categories: label + one-line pitch, shown in the onboarding picker.
+# Default install: only the uncommented rows below. Uncomment a row to
+# offer it again.
 # skills:     grouped by category. Per repo:
 #               []                 -> every skill in the repo
 #               ["a", "b"]         -> only those skills
@@ -28,35 +30,36 @@ security = "Static analysis and secure-code review"
 unreleased = "Explicit opt-in skills from development branches"
 
 [skills.research]
-"safishamsi/graphify" = []
-"warpdotdev/common-skills" = ["council"]
-"upstash/context7" = []
-"firecrawl/cli" = []
-"mem0ai/mem0" = []
+# "safishamsi/graphify" = []
+# "warpdotdev/common-skills" = ["council"]
+# "upstash/context7" = []
+# "firecrawl/cli" = []
+# "mem0ai/mem0" = []
 
 [skills.coding]
 "mattpocock/skills" = []
 "obra/superpowers" = []
 "garrytan/gstack" = ["gstack"]
 "DietrichGebert/ponytail" = []
-"https://github.com/julianobarbosa/claude-code-skills" = ["shellcheck"]
+"https://github.com/addyosmani/agent-skills" = []
+# "https://github.com/julianobarbosa/claude-code-skills" = ["shellcheck"]
 
 [skills.web]
-"https://github.com/vercel-labs/agent-skills" = ["vercel-composition-patterns", "vercel-react-best-practices", "web-design-guidelines"]
-"https://github.com/antfu/skills" = ["vite"]
-"GoogleChrome/modern-web-guidance" = []
+# "https://github.com/vercel-labs/agent-skills" = ["vercel-composition-patterns", "vercel-react-best-practices", "web-design-guidelines"]
+# "https://github.com/antfu/skills" = ["vite"]
+# "GoogleChrome/modern-web-guidance" = []
 
 [skills.design]
 "https://github.com/anthropics/skills" = ["algorithmic-art", "canvas-design", "frontend-design", "theme-factory"]
-"https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
-"https://github.com/shadcn/ui" = ["shadcn"]
+# "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill" = ["ui-ux-pro-max"]
+# "https://github.com/shadcn/ui" = ["shadcn"]
 "https://github.com/yoshi-ortiz/cyber-skills/tree/main" = []
-"thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
+# "thebushidocollective/han" = { install = "scripts/install-storybook-skill.sh" }
 "emilkowalski/skills" = ["emil-design-eng", "apple-design", "animate", "improve-animations", "review-animations", "animation-vocabulary", "ask-sonner", "find-animation-opportunities", "pick-ui-library"]
 # Paul Bakaus (jQuery UI). Apache-2.0, 61 deterministic detector rules, no LLM.
 # Bare: the repo resolves to exactly one skill. Hazard: `/impeccable init`
 # writes a global DESIGN.md -- never run inside a project checkout.
-"pbakaus/impeccable" = []
+# "pbakaus/impeccable" = []
 
 [skills.unreleased]
 # `alpha` is the generated, fog-free publication of `dev`, built by that repo's
@@ -64,17 +67,17 @@ unreleased = "Explicit opt-in skills from development branches"
 # a dev-only test harness, one design project's state, the roadmap -- because
 # `npx skills add` walks the tree for SKILL.md and knows nothing about that
 # repo's fog convention.
-"https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = []
+# "https://github.com/yoshi-ortiz/cyber-skills/tree/alpha" = []
 
 [skills.mobile]
-"ratacat/claude-skills" = ["xcode-test"]
-"tuist/agent-skills" = ["analyze-selective-testing", "compare-builds", "compare-bundles", "compare-cache-runs", "compare-generations", "compare-gradle-builds", "compare-test-case", "compare-test-runs", "debug-generated-project", "fix-flaky-tests", "using-tuist-generated-projects", "migrating-to-tuist-generated-projects"]
+# "ratacat/claude-skills" = ["xcode-test"]
+# "tuist/agent-skills" = ["analyze-selective-testing", "compare-builds", "compare-bundles", "compare-cache-runs", "compare-generations", "compare-gradle-builds", "compare-test-case", "compare-test-runs", "debug-generated-project", "fix-flaky-tests", "using-tuist-generated-projects", "migrating-to-tuist-generated-projects"]
 
 [skills.infra]
-"hashicorp/agent-skills" = ["aws-ami-builder", "azure-image-builder", "azure-verified-modules", "new-terraform-provider", "provider-actions", "provider-docs", "provider-resources", "provider-test-patterns", "push-to-registry", "refactor-module", "run-acceptance-tests", "terraform-search-import", "terraform-stacks", "terraform-style-guide", "terraform-test", "windows-builder"]
+# "hashicorp/agent-skills" = ["aws-ami-builder", "azure-image-builder", "azure-verified-modules", "new-terraform-provider", "provider-actions", "provider-docs", "provider-resources", "provider-test-patterns", "push-to-registry", "refactor-module", "run-acceptance-tests", "terraform-search-import", "terraform-stacks", "terraform-style-guide", "terraform-test", "windows-builder"]
 
 [skills.security]
-"semgrep/skills" = []
+# "semgrep/skills" = []
 
 # Servers removed from this list on 2026-08-28 because they 404d every sync.
 # Re-add by uncommenting; the harness syncs whatever is here.
@@ -90,6 +93,6 @@ unreleased = "Explicit opt-in skills from development branches"
 #   blender     a git URL, which Smithery needs `--name <alias>` for
 
 [skills.custom]
-"HubSpot/agent-cli-skills" = []
-"catalystbyzoho/agent-skills" = []
-"cloudflare/skills" = ["cloudflare"]
+# "HubSpot/agent-cli-skills" = []
+# "catalystbyzoho/agent-skills" = []
+# "cloudflare/skills" = ["cloudflare"]
